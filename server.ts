@@ -1,6 +1,10 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { streamText } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
+
+import type { Request, Response, NextFunction} from "express";
 
 const app = express();
 const client = new Anthropic();
@@ -14,7 +18,7 @@ const ChatMessageSchema = z.object({
 
 const ChatRequestSchema = z.object({
    messages: z.array(ChatMessageSchema).min(1).max(50),
-}).refine((data) => data.messages[data.messages.length -1].role === "user",{
+}).refine((data) => data.messages.at(-1)?.role === "user",{
    message: "The last message must be from the user."
 })
 
@@ -122,6 +126,39 @@ app.post("/summarize", async(req,res)=>{
     console.error(err);
     res.status(500).json({ error: "Something went wrong talking to Claude." });
   }
+})
+
+app.post("/chat-stream",async(req,res)=>{
+  const result = ChatRequestSchema.safeParse(req.body);
+  if(!result.success) {
+    return res.status(400).json({ error: result.error.issues[0]?.message ?? "Invalid request"});
+  }
+  const { messages } = result.data;
+
+  const stream = streamText({
+       model: anthropic("claude-haiku-5-5"),
+       maxOutputTokens: 1500,
+       messages,
+       onFinish: ({ usage }) => console.log("Usage:", usage),
+       onError: ({ error }) => console.error("Stream error:", error),
+  });
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+
+  try {
+    for await (const chunk of stream.textStream) {
+      res.write(chunk); 
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    res.end();
+  }
+})
+
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  console.error("Unhandled error", err);
+  if(res.headersSent) return next(err);
+  res.status(500).json({error:"Internal server error"})
 })
 
 app.listen(3000,()=>{
