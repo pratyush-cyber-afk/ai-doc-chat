@@ -1,40 +1,37 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 
 const app = express();
 const client = new Anthropic();
 
 app.use(express.json());
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+const ChatMessageSchema = z.object({
+   role: z.enum(["user","assistant"]),
+   content: z.string().trim().min(1).max(4000)
+});
+
+const ChatRequestSchema = z.object({
+   messages: z.array(ChatMessageSchema).min(1).max(50),
+}).refine((data) => data.messages[data.messages.length -1].role === "user",{
+   message: "The last message must be from the user."
+})
 
 app.post("/chat", async (req,res)=>{
-    const messages = req.body?.messages;
+    const result = ChatRequestSchema.safeParse(req.body);   
 
-    if(!Array.isArray(messages) || messages.length === 0 || messages.length > 50){
-        return res.status(400).json({error:"Send a 'messages' array (1-50 items)."});
-      }
-
-    const valid = messages.every(
-         (m: any) => 
-             (m?.role === "user" || m?.role === "assistant") &&
-              typeof m?.content === "string" &&
-              m.content.trim() !== "" &&
-              m.content.length <= 4000
-    );
-    if (!valid) {
-    return res.status(400).json({ error: "Each message needs a valid role and text." });
-  }
-
-  if (messages[messages.length - 1].role !== "user") {
-    return res.status(400).json({ error: "The last message must be from the user." });
-  }
-
+    if (!result.success) {
+      const firstIssue = result.error.issues[0];
+      return res.status(400).json({ error: firstIssue?.message ?? "Invalid request"});
+    }
+    const { messages } = result.data;
+ 
       try {
         const response = await client.messages.create({
             model: 'claude-haiku-5-5',
             max_tokens:1500,
-            messages:messages as ChatMessage[]
+            messages,
         });
 
        const textBlock = response.content.find((b) => b.type === "text");
