@@ -24,7 +24,7 @@ const App = () => {
     }
 
     try {
-      const res = await fetch("/chat-stream", {
+      const res = await fetch("/api/chat-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages }),

@@ -51,7 +51,7 @@ cd client && npm run dev
 ## Security notes
 
 - The API key lives only in the server's `.env` file, which is excluded from Git
-- The frontend talks only to `/chat` on its own origin (Vite proxy), never to the Claude API directly
+- The frontend talks only to `/api/*` routes on its own origin (Vite proxy), never to the Claude API directly
 - The server accepts only `user` and `assistant` roles, which blocks injected `system` messages
 - AI output is rendered as plain text (no `dangerouslySetInnerHTML`) to avoid XSS
 - Token usage is logged on the server, not exposed to the browser

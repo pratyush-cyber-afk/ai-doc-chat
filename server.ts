@@ -47,7 +47,7 @@ const summaryJsonSchema = {
   additionalProperties: false,
 }
 
-app.post("/chat", async (req,res)=>{
+app.post("/api/chat", async (req,res)=>{
     const result = ChatRequestSchema.safeParse(req.body);   
 
     if (!result.success) {
@@ -77,7 +77,7 @@ app.post("/chat", async (req,res)=>{
       }
 });
 
-app.post("/summarize", async(req,res)=>{
+app.post("/api/summarize", async(req,res)=>{
   const parsed = SummarizeRequestSchema.safeParse(req.body);
   if(!parsed.success){
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
@@ -130,7 +130,7 @@ app.post("/summarize", async(req,res)=>{
   }
 })
 
-app.post("/chat-stream",async(req,res)=>{
+app.post("/api/chat-stream",async(req,res)=>{
   const result = ChatRequestSchema.safeParse(req.body);
   if(!result.success) {
     return res.status(400).json({ error: result.error.issues[0]?.message ?? "Invalid request"});
