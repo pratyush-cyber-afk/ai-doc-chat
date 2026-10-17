@@ -7,6 +7,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { Request, Response, NextFunction} from "express";
 
 const app = express();
+app.disable("x-powered-by");
+
 const client = new Anthropic();
 
 app.use(express.json());

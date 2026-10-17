@@ -12,36 +12,59 @@ const App = () => {
     if (!input.trim() || loading) return;
 
     const newMessages: ChatMessage[] = [...messages,{role:"user",content:input}];
-    setMessages(newMessages);
+    setMessages([...newMessages, { role:"assistant", content:""}]);
     setInput("");
     setLoading(true);
     setError("");
 
+    const rollback = (msg: string) => {
+      setError(msg);
+      setMessages(messages);
+      setInput(newMessages[newMessages.length - 1].content);
+    }
+
     try {
-      const res = await fetch("/chat", {
+      const res = await fetch("/chat-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
-        setMessages(messages);
-        setInput(newMessages[newMessages.length -1].content);
-        return;
-      }
-
-      setMessages([...newMessages, { role: "assistant", content: data.reply }]);
-    } catch {
-      setError("Could not reach the server. Is it running?");
-      setMessages(messages);
-      setInput(newMessages[newMessages.length - 1].content);
-    } finally {
-      setLoading(false);
+      if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      rollback(data.error ?? "Something went wrong.");
+      return;
     }
+
+     const reader = res.body.getReader();
+     const decoder = new TextDecoder();
+     let fullText = "";
+
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        updated[updated.length - 1] = { ...last, content: last.content + chunk };
+        return updated;
+      });
+    }
+
+    if (!fullText.trim()) {
+      rollback("Claude didn't return an answer. Please try again.");
+    }
+  } catch {
+    rollback("Could not reach the server. Is it running?");
+  } finally {
+    setLoading(false);
   }
+};
 
   return (
     <div style={{ maxWidth: 600, margin: "40px auto", fontFamily: "sans-serif",textAlign:"left" }}>
@@ -49,7 +72,7 @@ const App = () => {
 
        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
         {messages.map((m, i) => (
-          <div
+          m.content === "" ? null : (<div
             key={i}
             style={{
               alignSelf: m.role === "user" ? "flex-end" : "flex-start",
@@ -62,9 +85,10 @@ const App = () => {
             }}
           >
             {m.content}
-          </div>
+          </div>)
         ))}
-        {loading && <div style={{ color: "#888" }}>Thinking...</div>}
+        {loading && messages[messages.length - 1]?.content === ""  &&
+         <div style={{ color: "#888" }}>Thinking...</div>}
       </div>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
