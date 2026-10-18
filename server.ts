@@ -4,6 +4,7 @@ import { z } from "zod";
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
+import rateLimit from "express-rate-limit";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -13,6 +14,16 @@ app.disable("x-powered-by");
 const client = new Anthropic();
 
 app.use(express.json());
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 3,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a minute and try again." },
+});
+
+app.use("/api", apiLimiter);
 
 const ChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),

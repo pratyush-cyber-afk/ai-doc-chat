@@ -16,6 +16,7 @@ grow into a secure, permission-aware document assistant (RAG).
 - Mid-stream error handling: interrupted replies roll back, and cut-off replies are flagged
 - Safe error handling: generic messages to users, details only in server logs
 - Failed messages roll back to the input box so the user can retry
+- Rate limiting: each IP can make up to 20 API requests per minute (429 with a friendly message after that)
 
 ## Tech stack
 
@@ -68,6 +69,8 @@ cd client && npm run dev
 - The `x-powered-by` header is disabled to avoid revealing the framework
 - AI output is rendered as plain text (no `dangerouslySetInnerHTML`) to avoid XSS
 - Token usage is logged on the server, not exposed to the browser
+- Rate limiting runs before validation and before any Claude call, so blocked requests cost nothing
+- Rate limits are per IP and in memory for now; they'll move to per-user limits once login is added
 
 ## What I learned
 
@@ -84,5 +87,5 @@ cd client && npm run dev
 ## Roadmap
 
 - [x] Week 1: chat app with memory
-- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting, markdown rendering
+- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget, markdown rendering
 - [ ] Weeks 3–4: document upload and RAG with pgvector
