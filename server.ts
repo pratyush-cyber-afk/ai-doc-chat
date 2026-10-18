@@ -49,40 +49,6 @@ const summaryJsonSchema = {
   additionalProperties: false,
 };
 
-app.post("/api/chat", async (req, res) => {
-  const result = ChatRequestSchema.safeParse(req.body);
-
-  if (!result.success) {
-    const firstIssue = result.error.issues[0];
-    return res
-      .status(400)
-      .json({ error: firstIssue?.message ?? "Invalid request" });
-  }
-  const { messages } = result.data;
-
-  try {
-    const response = await client.messages.create({
-      model: "claude-haiku-5-5",
-      max_tokens: 1500,
-      messages,
-    });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    const reply = textBlock?.type === "text" ? textBlock.text : "";
-
-    console.log("Usage:", response.usage);
-    if (!reply) {
-      return res
-        .status(502)
-        .json({ error: "Claude didn't return an answer. Please try again." });
-    }
-    res.json({ reply, stop_reason: response.stop_reason });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Something went wrong talking to claude" });
-  }
-});
-
 app.post("/api/summarize", async (req, res) => {
   const parsed = SummarizeRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -110,11 +76,9 @@ app.post("/api/summarize", async (req, res) => {
     console.log("Usage:", response.usage);
 
     if (response.stop_reason !== "end_turn") {
-      return res
-        .status(502)
-        .json({
-          error: `Could not summarize (stop reason: ${response.stop_reason}).`,
-        });
+      return res.status(502).json({
+        error: `Could not summarize (stop reason: ${response.stop_reason}).`,
+      });
     }
 
     const textBlock = response.content.find((b) => b.type === "text");
@@ -144,7 +108,7 @@ app.post("/api/summarize", async (req, res) => {
   }
 });
 
-app.post("/api/chat-stream", async (req, res) => {
+app.post("/api/chat", async (req, res) => {
   const result = ChatRequestSchema.safeParse(req.body);
   if (!result.success) {
     return res
