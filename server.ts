@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { CHAT_SYSTEM_PROMPT } from "./prompts";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -119,6 +120,7 @@ app.post("/api/chat", async (req, res) => {
 
   const ai = streamText({
     model: anthropic("claude-haiku-5-5"),
+    system: CHAT_SYSTEM_PROMPT,
     maxOutputTokens: 1500,
     messages,
     onFinish: ({ usage }) => console.log("Usage:", usage),

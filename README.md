@@ -79,9 +79,10 @@ cd client && npm run dev
 - React state updates are not immediate, so I build the new array before sending it,
   and use functional updates inside the streaming loop
 - Fast-moving libraries change often: the editor's type hints flagged deprecated APIs that tutorials still use
+- The model refused to quote its system prompt but paraphrased it anyway, so system prompts must be treated as public.
 
 ## Roadmap
 
 - [x] Week 1: chat app with memory
-- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt, rate limiting, markdown rendering
+- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting, markdown rendering
 - [ ] Weeks 3–4: document upload and RAG with pgvector
