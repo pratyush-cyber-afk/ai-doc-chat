@@ -18,6 +18,7 @@ grow into a secure, permission-aware document assistant (RAG).
 - Failed messages roll back to the input box so the user can retry
 - Rate limiting: each IP can make up to 20 API requests per minute (429 with a friendly message after that)
 - Daily token budget: each IP can use up to 50,000 tokens per day across all AI endpoints (429 once it's used up)
+- Assistant replies render as markdown (tables, lists, bold, code), with user messages kept as plain text
 
 ## Tech stack
 
@@ -68,7 +69,9 @@ cd client && npm run dev
 - Stream events are JSON, so model text can't fake an error or "done" signal
 - A global error handler returns generic messages, so stack traces and file paths never reach the client
 - The `x-powered-by` header is disabled to avoid revealing the framework
-- AI output is rendered as plain text (no `dangerouslySetInnerHTML`) to avoid XSS
+- Assistant replies are rendered with react-markdown, which builds React elements instead of raw HTML, so HTML or script in model output is never executed
+- Images in model output are blocked, so a manipulated reply can't leak data through an image URL
+- Links open in a new tab with `rel="noopener noreferrer"`
 - Token usage is logged on the server, not exposed to the browser
 - Rate limiting runs before validation and before any Claude call, so blocked requests cost nothing
 - Rate limits are per IP and in memory for now; they'll move to per-user limits once login is added
@@ -91,9 +94,10 @@ cd client && npm run dev
 - Rate limits count requests, but cost depends on tokens, so both limits are needed and they cover each other's gaps
 - Security controls should fail closed: a `NaN` in the token count would have disabled the budget check without any error
 - Test values (like a limit of 3) are easy to commit by accident, so I check `git diff` before every commit
+- The model's caution isn't a security control: asked to output an XSS payload, it refused, then printed it anyway in a code block. The renderer is what kept it safe.
 
 ## Roadmap
 
 - [x] Week 1: chat app with memory
-- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering
+- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering ✅,
 - [ ] Weeks 3–4: document upload and RAG with pgvector

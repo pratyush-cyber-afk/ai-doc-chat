@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -126,10 +128,26 @@ const App = () => {
                 padding: "8px 12px",
                 borderRadius: 12,
                 maxWidth: "80%",
-                whiteSpace: "pre-wrap",
+                whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
               }}
             >
-              {m.content}
+              {m.role === "assistant" ? (
+                <div className="markdown">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ node: _node, ...props }) => (
+                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                      ),
+                      img: ({ alt }) => <span>[image removed: {alt}]</span>,
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                m.content
+              )}
             </div>
           ),
         )}
