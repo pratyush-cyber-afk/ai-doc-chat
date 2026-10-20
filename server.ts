@@ -5,6 +5,7 @@ import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
+import { tokenBudget, recordUsage } from "./tokenBudget";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -17,13 +18,14 @@ app.use(express.json());
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 3,
+  limit: 20,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { error: "Too many requests. Please wait a minute and try again." },
 });
 
 app.use("/api", apiLimiter);
+app.use("/api", tokenBudget);
 
 const ChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -86,6 +88,10 @@ app.post("/api/summarize", async (req, res) => {
     });
 
     console.log("Usage:", response.usage);
+    recordUsage(
+      req.ip ?? "unknown",
+      response.usage.input_tokens + response.usage.output_tokens,
+    );
 
     if (response.stop_reason !== "end_turn") {
       return res.status(502).json({
@@ -129,12 +135,17 @@ app.post("/api/chat", async (req, res) => {
   }
   const { messages } = result.data;
 
+  const ip = req.ip ?? "unknown";
+
   const ai = streamText({
     model: anthropic("claude-haiku-5-5"),
     system: CHAT_SYSTEM_PROMPT,
     maxOutputTokens: 1500,
     messages,
-    onFinish: ({ usage }) => console.log("Usage:", usage),
+    onFinish: ({ usage }) => {
+      console.log("Usage:", usage);
+      recordUsage(ip, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
+    },
     onError: ({ error }) => console.error("Stream error:", error),
   });
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");

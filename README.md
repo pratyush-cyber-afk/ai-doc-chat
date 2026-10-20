@@ -17,6 +17,7 @@ grow into a secure, permission-aware document assistant (RAG).
 - Safe error handling: generic messages to users, details only in server logs
 - Failed messages roll back to the input box so the user can retry
 - Rate limiting: each IP can make up to 20 API requests per minute (429 with a friendly message after that)
+- Daily token budget: each IP can use up to 50,000 tokens per day across all AI endpoints (429 once it's used up)
 
 ## Tech stack
 
@@ -71,6 +72,10 @@ cd client && npm run dev
 - Token usage is logged on the server, not exposed to the browser
 - Rate limiting runs before validation and before any Claude call, so blocked requests cost nothing
 - Rate limits are per IP and in memory for now; they'll move to per-user limits once login is added
+- Middleware order is rate limiter → token budget → route, so the cheapest checks run first and blocked requests never reach Claude
+- Tokens are counted even when a summary fails validation, so failed requests can't be used to get free usage
+- Missing token counts default to 0 instead of NaN, so the budget check can't silently switch itself off
+- Token budgets are stored in memory, so they reset when the server restarts; production would use Redis or a database
 
 ## What I learned
 
@@ -83,9 +88,12 @@ cd client && npm run dev
   and use functional updates inside the streaming loop
 - Fast-moving libraries change often: the editor's type hints flagged deprecated APIs that tutorials still use
 - The model refused to quote its system prompt but paraphrased it anyway, so system prompts must be treated as public.
+- Rate limits count requests, but cost depends on tokens, so both limits are needed and they cover each other's gaps
+- Security controls should fail closed: a `NaN` in the token count would have disabled the budget check without any error
+- Test values (like a limit of 3) are easy to commit by accident, so I check `git diff` before every commit
 
 ## Roadmap
 
 - [x] Week 1: chat app with memory
-- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget, markdown rendering
+- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering
 - [ ] Weeks 3–4: document upload and RAG with pgvector
