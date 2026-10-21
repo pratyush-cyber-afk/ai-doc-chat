@@ -19,6 +19,7 @@ grow into a secure, permission-aware document assistant (RAG).
 - Rate limiting: each IP can make up to 20 API requests per minute (429 with a friendly message after that)
 - Daily token budget: each IP can use up to 50,000 tokens per day across all AI endpoints (429 once it's used up)
 - Assistant replies render as markdown (tables, lists, bold, code), with user messages kept as plain text
+- Chat UI: auto-scrolls as replies stream in, plus a "New chat" button to start fresh
 
 ## Tech stack
 
@@ -95,9 +96,11 @@ cd client && npm run dev
 - Security controls should fail closed: a `NaN` in the token count would have disabled the budget check without any error
 - Test values (like a limit of 3) are easy to commit by accident, so I check `git diff` before every commit
 - The model's caution isn't a security control: asked to output an XSS payload, it refused, then printed it anyway in a code block. The renderer is what kept it safe.
+- `useRef` holds a DOM element (a marker at the bottom of the chat) so `useEffect` can scroll to it after each streamed chunk
+- Clearing the chat mid-stream would crash the streaming loop (a race condition), so "New chat" is disabled while a reply is streaming
 
 ## Roadmap
 
 - [x] Week 1: chat app with memory
-- [ ] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering ✅,
+- [x] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering ✅,
 - [ ] Weeks 3–4: document upload and RAG with pgvector

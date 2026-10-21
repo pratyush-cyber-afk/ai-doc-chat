@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -9,6 +9,12 @@ const App = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -98,6 +104,12 @@ const App = () => {
     }
   };
 
+  const newChat = () => {
+    setMessages([]);
+    setInput("");
+    setError("");
+  };
+
   return (
     <div
       style={{
@@ -107,7 +119,18 @@ const App = () => {
         textAlign: "left",
       }}
     >
-      <h1>My AI Chat</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h1>Nova</h1>
+        <button onClick={newChat} disabled={loading || messages.length === 0}>
+          New chat
+        </button>
+      </div>
 
       <div
         style={{
@@ -137,7 +160,11 @@ const App = () => {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       a: ({ node: _node, ...props }) => (
-                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                        <a
+                          {...props}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
                       ),
                       img: ({ alt }) => <span>[image removed: {alt}]</span>,
                     }}
@@ -154,6 +181,7 @@ const App = () => {
         {loading && messages[messages.length - 1]?.content === "" && (
           <div style={{ color: "#888" }}>Thinking...</div>
         )}
+        <div ref={bottomRef} />
       </div>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
@@ -163,12 +191,12 @@ const App = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Ask Claude something..."
+          placeholder="Ask Nova something..."
           style={{ flex: 1, padding: 8 }}
           disabled={loading}
         />
         <button onClick={sendMessage} disabled={loading}>
-          send
+          Send
         </button>
       </div>
     </div>
