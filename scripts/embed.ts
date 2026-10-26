@@ -1,54 +1,13 @@
-import { z } from "zod";
 import { pool } from "../db/client";
 import { loadDocs, chunkDoc } from "../lib/chunker";
-
-const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
-const MODEL = "voyage-4";
-const DIMENSIONS = 1024;
-
-const VoyageResponseSchema = z.object({
-  data: z.array(
-    z.object({ embedding: z.array(z.number()), index: z.number() }),
-  ),
-  usage: z.object({ total_tokens: z.number() }),
-});
-
-const embedDocuments = async (texts: string[]) => {
-  const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) throw new Error("VOYAGE_API_KEY is not set");
-
-  const res = await fetch(VOYAGE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      input: texts,
-      model: MODEL,
-      input_type: "document",
-    }),
-  });
-  if (!res.ok)
-    throw new Error(`Voyage error ${res.status}: ${await res.text()}`);
-
-  const body = VoyageResponseSchema.parse(await res.json());
-  const embeddings = body.data
-    .sort((a, b) => a.index - b.index)
-    .map((d) => d.embedding);
-  return { embeddings, tokens: body.usage.total_tokens };
-};
+import { embed } from "../lib/voyage";
 
 const main = async () => {
   const chunks = loadDocs().flatMap(chunkDoc);
-  const { embeddings, tokens } = await embedDocuments(
+  const { embeddings, tokens } = await embed(
     chunks.map((c) => c.text),
+    "document",
   );
-
-  if (embeddings.length !== chunks.length)
-    throw new Error("Embedding count mismatch");
-  if (embeddings.some((e) => e.length !== DIMENSIONS))
-    throw new Error("Wrong embedding size");
 
   const client = await pool.connect();
   try {

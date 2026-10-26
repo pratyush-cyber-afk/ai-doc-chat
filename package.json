@@ -8,7 +8,8 @@
     "start": "tsx --env-file=.env index.ts",
     "dev": "tsx watch --env-file=.env server.ts",
     "chunk": "tsx scripts/chunk.ts",
-    "embed": "tsx --env-file=.env scripts/embed.ts"
+    "embed": "tsx --env-file=.env scripts/embed.ts",
+    "search": "tsx --env-file=.env scripts/search.ts"
   },
   "keywords": [],
   "author": "",
