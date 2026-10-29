@@ -6,6 +6,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
 import { tokenBudget, recordUsage } from "./tokenBudget";
+import { search, AccessLevelSchema } from "./lib/search";
+import { formatContext } from "./lib/context";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -13,6 +15,11 @@ const app = express();
 app.disable("x-powered-by");
 
 const client = new Anthropic();
+
+const ACCESS_LEVEL = AccessLevelSchema.parse(
+  process.env.DEMO_ACCESS_LEVEL ?? "public",
+);
+console.log(`Chat access level: ${ACCESS_LEVEL}`);
 
 app.use(express.json());
 
@@ -137,11 +144,36 @@ app.post("/api/chat", async (req, res) => {
 
   const ip = req.ip ?? "unknown";
 
+  const last = messages[messages.length - 1];
+
+  let context: string;
+  try {
+    const results = await search(last.content, ACCESS_LEVEL);
+    console.log(
+      "Retrieved:",
+      results.map((r) => `${r.id} (${r.distance.toFixed(3)})`),
+    );
+    context = formatContext(results);
+  } catch (err) {
+    console.error("Search failed:", err);
+    return res.status(503).json({
+      error: "Document search is unavailable right now. Please try again.",
+    });
+  }
+
+  const augmented = [
+    ...messages.slice(0, -1),
+    {
+      role: "user" as const,
+      content: `${context}\n\nQuestion: ${last.content}`,
+    },
+  ];
+
   const ai = streamText({
     model: anthropic("claude-haiku-5-5"),
     system: CHAT_SYSTEM_PROMPT,
     maxOutputTokens: 1500,
-    messages,
+    messages: augmented,
     onFinish: ({ usage }) => {
       console.log("Usage:", usage);
       recordUsage(ip, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
