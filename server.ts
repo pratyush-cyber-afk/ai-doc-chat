@@ -6,7 +6,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
 import { tokenBudget, recordUsage } from "./tokenBudget";
-import { search, AccessLevelSchema } from "./lib/search";
+import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
 import { formatContext } from "./lib/context";
 
 import type { Request, Response, NextFunction } from "express";
@@ -147,8 +147,9 @@ app.post("/api/chat", async (req, res) => {
   const last = messages[messages.length - 1];
 
   let context: string;
+  let results: SearchResult[] = [];
   try {
-    const results = await search(last.content, ACCESS_LEVEL);
+    results = await search(last.content, ACCESS_LEVEL);
     console.log(
       "Retrieved:",
       results.map((r) => `${r.id} (${r.distance.toFixed(3)})`),
@@ -183,6 +184,17 @@ app.post("/api/chat", async (req, res) => {
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
 
   const send = (event: object) => res.write(JSON.stringify(event) + "\n");
+
+  const sources = Object.values(
+    results.reduce<
+      Record<string, { doc_id: string; title: string; headings: string[] }>
+    >((acc, r) => {
+      acc[r.doc_id] ??= { doc_id: r.doc_id, title: r.title, headings: [] };
+      acc[r.doc_id].headings.push(r.heading);
+      return acc;
+    }, {}),
+  );
+  send({ type: "sources", sources });
 
   try {
     for await (const part of ai.stream) {

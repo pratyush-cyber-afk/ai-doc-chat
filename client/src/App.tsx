@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type Source = { doc_id: string; title: string; headings: string[] };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  sources?: Source[];
+};
 
 const App = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -38,7 +43,9 @@ const App = () => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages.map(({ role, content }) => ({ role, content })),
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -79,6 +86,15 @@ const App = () => {
               updated[updated.length - 1] = {
                 ...last,
                 content: last.content + event.text,
+              };
+              return updated;
+            });
+          } else if (event.type === "sources") {
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                sources: event.sources,
               };
               return updated;
             });
@@ -171,6 +187,29 @@ const App = () => {
                   >
                     {m.content}
                   </ReactMarkdown>
+                  {m.sources && m.sources.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        paddingTop: 6,
+                        borderTop: "1px solid #ddd",
+                        fontSize: 12,
+                        color: "#555",
+                      }}
+                    >
+                      Sources:
+                      <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                        {m.sources.map((s) => (
+                          <li key={s.doc_id}>
+                            {s.title}{" "}
+                            <span style={{ color: "#888" }}>
+                              ({s.headings.join(", ")})
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ) : (
                 m.content

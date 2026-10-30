@@ -14,6 +14,7 @@ export type SearchResult = {
   doc_id: string;
   access_level: AccessLevel;
   heading: string;
+  title: string;
   content: string;
   distance: number;
 };
@@ -29,7 +30,7 @@ export const search = async (
   const { embeddings } = await embed([question], "query");
 
   const { rows } = await pool.query<SearchResult>(
-    `SELECT id, doc_id, access_level, heading, content, embedding <=> $1::vector AS distance
+    `SELECT id, doc_id, access_level, heading, title, content, embedding <=> $1::vector AS distance
      FROM chunks
      WHERE access_level = ANY($2)
        AND (embedding <=> $1::vector) <= $3
