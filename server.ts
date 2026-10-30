@@ -226,6 +226,7 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(3000, () => {
+app.listen(3000, (err) => {
+  if (err) throw err;
   console.log("Server running at http://localhost:3000");
 });
