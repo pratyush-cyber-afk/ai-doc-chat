@@ -13,7 +13,7 @@ const main = async () => {
   if (results.length === 0) console.log("No relevant chunks found.");
   for (const r of results) {
     console.log(
-      `[${r.distance.toFixed(3)}] ${r.doc_id} (${r.access_level}) > ${r.heading}`,
+      `[score ${r.score.toFixed(4)} | dist ${r.distance.toFixed(3)}] ${r.id} (${r.access_level}) > ${r.heading}`,
     );
     console.log(`   ${r.content.slice(0, 150).replace(/\n+/g, " ")}…\n`);
   }
