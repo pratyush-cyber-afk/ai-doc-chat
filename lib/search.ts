@@ -2,7 +2,12 @@ import { z } from "zod";
 import { pool } from "../db/client";
 import { embed } from "./voyage";
 
-const ACCESS_LEVELS = ["public", "personnel", "survey", "directorate"] as const;
+export const ACCESS_LEVELS = [
+  "public",
+  "personnel",
+  "survey",
+  "directorate",
+] as const;
 export const AccessLevelSchema = z.enum(ACCESS_LEVELS);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 
@@ -10,6 +15,7 @@ const TOP_K = 3;
 const MAX_DISTANCE = 0.7;
 const CANDIDATES = 20;
 const RRF_K = 60;
+const KEYWORD_MAX_DISTANCE = 0.8;
 
 export type SearchResult = {
   id: string;
@@ -28,10 +34,12 @@ const allowedLevels = (level: AccessLevel) =>
 export const search = async (
   question: string,
   userLevel: AccessLevel,
+  mode: "vector" | "hybrid" = "hybrid",
 ): Promise<SearchResult[]> => {
   const level = AccessLevelSchema.parse(userLevel);
   const { embeddings } = await embed([question], "query");
-  const keywordQuery = question.trim().split(/\s+/).join(" or ");
+  const keywordQuery =
+    mode === "hybrid" ? question.trim().split(/\s+/).join(" or ") : "";
 
   const { rows } = await pool.query<SearchResult>(
     `WITH vector AS (
@@ -43,7 +51,7 @@ export const search = async (
    keyword AS (
      SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(content_tsv, q) DESC) AS rank
      FROM chunks, websearch_to_tsquery('english', $6) AS q
-     WHERE access_level = ANY($2) AND content_tsv @@ q
+     WHERE access_level = ANY($2) AND content_tsv @@ q AND (embedding <=> $1::vector) <= $8
      ORDER BY ts_rank(content_tsv, q) DESC LIMIT $5
    )
    SELECT c.id, c.doc_id, c.access_level, c.heading, c.title, c.content,
@@ -62,6 +70,7 @@ export const search = async (
       CANDIDATES,
       keywordQuery,
       RRF_K,
+      KEYWORD_MAX_DISTANCE,
     ],
   );
   return rows;

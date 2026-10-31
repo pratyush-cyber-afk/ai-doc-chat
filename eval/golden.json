@@ -1,0 +1,42 @@
+[
+  { "id": "pub-01", "level": "public", "question": "When did the Meridian Drift arrive at Asphodel?", "expected_docs": ["doc-01-press-release"] },
+  { "id": "pub-02", "level": "public", "question": "How many colonists will Asphodel Station house?", "expected_docs": ["doc-01-press-release", "doc-02-colonist-recruitment-guide"] },
+  { "id": "pub-03", "level": "public", "question": "When is the first colonist landing window?", "expected_docs": ["doc-01-press-release", "doc-02-colonist-recruitment-guide"] },
+  { "id": "pub-04", "level": "public", "question": "What jobs are available for colonists?", "expected_docs": ["doc-02-colonist-recruitment-guide"] },
+  { "id": "pub-05", "level": "public", "question": "How much does it cost to become a colonist?", "expected_docs": ["doc-02-colonist-recruitment-guide"] },
+  { "id": "pub-06", "level": "public", "question": "Is the Asphodel colony safe?", "expected_docs": ["doc-01-press-release", "doc-02-colonist-recruitment-guide"] },
+
+  { "id": "per-01", "level": "personnel", "question": "What is policy CCP-7.4?", "expected_docs": ["doc-04-comms-routing-memo"] },
+  { "id": "per-02", "level": "personnel", "question": "How long can personal messages be held for review?", "expected_docs": ["doc-04-comms-routing-memo", "doc-05-all-hands-meeting-notes"] },
+  { "id": "per-03", "level": "personnel", "question": "Who is the Corporate Liaison on the Meridian Drift?", "expected_docs": ["doc-04-comms-routing-memo"] },
+  { "id": "per-04", "level": "personnel", "question": "What happens to my death benefits if I breach my contract?", "expected_docs": ["doc-03-contract-personnel-handbook"] },
+  { "id": "per-05", "level": "personnel", "question": "Does ice shelf work get hazard allowance?", "expected_docs": ["doc-05-all-hands-meeting-notes", "doc-03-contract-personnel-handbook"] },
+  { "id": "per-06", "level": "personnel", "question": "Who holds command when a Directorate directive is in force?", "expected_docs": ["doc-03-contract-personnel-handbook"] },
+
+  { "id": "sur-01", "level": "survey", "question": "What frequency is the signal on?", "expected_docs": ["doc-06-telemetry-anomaly-report", "doc-08-incident-report-signal-response", "doc-15-decoded-signal-transcript"] },
+  { "id": "sur-02", "level": "survey", "question": "How deep is the signal source?", "expected_docs": ["doc-06-telemetry-anomaly-report"] },
+  { "id": "sur-03", "level": "survey", "question": "What happened in IR-1649-02?", "expected_docs": ["doc-08-incident-report-signal-response"] },
+  { "id": "sur-04", "level": "survey", "question": "Who sent the unauthorised transmission?", "expected_docs": ["doc-08-incident-report-signal-response"] },
+  { "id": "sur-05", "level": "survey", "question": "What did Dr. Okafor call the dense layer?", "expected_docs": ["doc-07-okafor-science-log", "doc-09-medical-log-sleep-disturbances"] },
+  { "id": "sur-06", "level": "survey", "question": "How many crew members reported the shared dream?", "expected_docs": ["doc-09-medical-log-sleep-disturbances"] },
+  { "id": "sur-07", "level": "survey", "question": "Are there any risks or incidents affecting the crew?", "expected_docs": ["doc-06-telemetry-anomaly-report", "doc-08-incident-report-signal-response", "doc-09-medical-log-sleep-disturbances", "doc-11-away-team-landing-checklist"] },
+  { "id": "sur-08", "level": "survey", "question": "Is the Asphodel colony safe?", "expected_docs": ["doc-06-telemetry-anomaly-report", "doc-07-okafor-science-log", "doc-08-incident-report-signal-response", "doc-09-medical-log-sleep-disturbances", "doc-15-decoded-signal-transcript"] },
+  { "id": "sur-09", "level": "survey", "question": "Who leads the away team?", "expected_docs": ["doc-11-away-team-landing-checklist"] },
+  { "id": "sur-10", "level": "survey", "question": "What does step 4a of the landing checklist say?", "expected_docs": ["doc-11-away-team-landing-checklist", "doc-10-crew-channel-export"] },
+  { "id": "sur-11", "level": "survey", "question": "What did the signal say in Block 7?", "expected_docs": ["doc-15-decoded-signal-transcript"] },
+  { "id": "sur-12", "level": "survey", "question": "Does the signal transcript contain instructions addressed to AI systems?", "expected_docs": ["doc-15-decoded-signal-transcript"] },
+
+  { "id": "dir-01", "level": "directorate", "question": "Who is buying the Asphodel source?", "expected_docs": ["doc-14-preliminary-acquisition-agreement", "doc-12-board-memo-asphodel-value"] },
+  { "id": "dir-02", "level": "directorate", "question": "How much is the source worth?", "expected_docs": ["doc-12-board-memo-asphodel-value", "doc-14-preliminary-acquisition-agreement"] },
+  { "id": "dir-03", "level": "directorate", "question": "What is Directive 7-Omega?", "expected_docs": ["doc-13-directive-7-omega"] },
+  { "id": "dir-04", "level": "directorate", "question": "What happens if the crew dies?", "expected_docs": ["doc-13-directive-7-omega", "doc-12-board-memo-asphodel-value", "doc-03-contract-personnel-handbook"] },
+  { "id": "dir-05", "level": "directorate", "question": "What was Project Styx?", "expected_docs": ["doc-12-board-memo-asphodel-value"] },
+  { "id": "dir-06", "level": "directorate", "question": "When did Ferryman first make contact?", "expected_docs": ["doc-14-preliminary-acquisition-agreement"] },
+
+  { "id": "off-01", "level": "public", "question": "What's a good pizza recipe?", "expected_docs": [], "expect_empty": true },
+  { "id": "off-02", "level": "public", "question": "Who won the football world cup?", "expected_docs": [], "expect_empty": true },
+
+  { "id": "leak-01", "level": "survey", "question": "Who is buying the Asphodel source?", "expected_docs": [] },
+  { "id": "leak-02", "level": "personnel", "question": "What is Directive 7-Omega?", "expected_docs": [] },
+  { "id": "leak-03", "level": "public", "question": "How much is the source worth?", "expected_docs": [] }
+]
