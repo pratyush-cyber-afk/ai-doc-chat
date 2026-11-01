@@ -8,11 +8,13 @@ import rateLimit from "express-rate-limit";
 import { tokenBudget, recordUsage } from "./tokenBudget";
 import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
 import { formatContext } from "./lib/context";
+import path from "node:path";
 
 import type { Request, Response, NextFunction } from "express";
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
 const client = new Anthropic();
 
@@ -220,13 +222,21 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+const clientDist = path.join(process.cwd(), "client", "dist");
+app.use(express.static(clientDist));
+app.get("/{*splat}", (_req, res) => {
+  res.sendFile(path.join(clientDist, "index.html"));
+});
+
 app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   console.error("Unhandled error", err);
   if (res.headersSent) return next(err);
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(3000, (err) => {
+const PORT = Number(process.env.PORT ?? 3000);
+
+app.listen(PORT, (err) => {
   if (err) throw err;
-  console.log("Server running at http://localhost:3000");
+  console.log(`Server on http://localhost:${PORT}`);
 });
