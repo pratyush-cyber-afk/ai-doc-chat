@@ -6,6 +6,9 @@ and response is validated. It's growing into a secure, permission-aware document
 assistant (RAG): documents are chunked, embedded and stored in Postgres with
 pgvector, and search only returns chunks the user's access level allows.
 
+**Live demo:** https://charon-nova.onrender.com (public access level only; the free instance sleeps
+when idle, so the first load can take about a minute)
+
 ![Screenshot](docs/screenshot.png)
 
 ## Features
@@ -24,6 +27,10 @@ pgvector, and search only returns chunks the user's access level allows.
 - Document ingestion: markdown docs with frontmatter are split into chunks by heading, with a size fallback and overlap
 - Embeddings with Voyage AI (`voyage-4`, 1024 dimensions), stored in Postgres + pgvector with an HNSW index
 - Permission-aware similarity search: top-3 chunks filtered by access level, with a distance threshold so unrelated questions return nothing
+- RAG chat: "Nova" answers only from retrieved documents, and says so plainly when the documents don't cover a question
+- Sources: each answer shows which documents (and sections) it was based on
+- Hybrid search: Postgres full-text search plus vector search, merged with Reciprocal Rank Fusion (RRF)
+- Golden eval set: 35 hand-written questions measure hit rate, MRR, off-topic handling and leaks for vector vs hybrid search
 
 ## Tech stack
 
@@ -31,13 +38,14 @@ pgvector, and search only returns chunks the user's access level allows.
 - **Backend:** Node.js 22, Express, TypeScript (tsx), zod
 - **AI:** Claude API (Claude Haiku 5.5, chosen for speed and low cost) via the Vercel AI SDK and the Anthropic SDK
 - **Embeddings:** Voyage AI `voyage-4`
-- **Database:** Postgres 18 + pgvector 0.8, running in Docker (OrbStack on macOS)
+- **Database:** Postgres 18 + pgvector 0.8, running in Docker (OrbStack on macOS) locally, Neon in production
+- **Hosting:** Render (one web service: Express serves both the API and the built React app)
 
 ## API
 
 | Method | Route            | What it does                                               |
 | ------ | ---------------- | ---------------------------------------------------------- |
-| POST   | `/api/chat`      | Streams a reply as NDJSON events (`text`, `error`, `done`) |
+| POST   | `/api/chat`      | Streams a reply as NDJSON events (`sources`, `text`, `error`, `done`) |
 | POST   | `/api/summarize` | Returns a structured summary as validated JSON             |
 
 ## Sample documents: Charon Colonial
@@ -58,6 +66,29 @@ They double as test fixtures:
 - **Leak test:** directorate-only facts (the buyer's name, the valuation) must never be returned to lower levels
 - **Prompt injection test:** Doc 15 contains a planted indirect prompt injection on purpose
 - **Hallucination test:** the story stops before the landing, so "what happened on the moon?" has no answer in the docs
+
+## How a question is answered
+
+1. **Retrieve:** the question is embedded and searched two ways, by meaning (pgvector) and by keywords
+   (Postgres full-text search). Both searches filter by access level first. The two ranked lists are
+   merged with RRF and the top 3 chunks are kept.
+2. **Augment:** the chunks are wrapped in a `<documents>` block and added to the user's turn.
+   A `sources` event (document titles and headings only) is sent to the browser.
+3. **Generate:** Claude streams the answer, which the server forwards as `text` events.
+
+## Evaluation
+
+`npm run eval` runs the golden set in `eval/golden.json` (35 questions across all four access levels)
+against both search modes and exits with an error if any restricted document leaks.
+
+| Mode   | Hit rate @3 | MRR   | Off-topic returns nothing | Leaks |
+| ------ | ----------- | ----- | ------------------------- | ----- |
+| Vector | 28/30       | 0.933 | 2/2                       | 0     |
+| Hybrid | 29/30       | 0.928 | 2/2                       | 0     |
+
+Hybrid is the default. Its first run let an off-topic question through (the word "world" matched),
+so the keyword branch also got a distance cutoff. One known miss in both modes: "Is the Asphodel
+colony safe?" at survey level, a meaning gap that a reranker or query rewriting should fix.
 
 ## Getting started
 
@@ -101,6 +132,21 @@ npm run dev
 cd client && npm run dev
 ```
 
+### 5. Production build (optional)
+
+```bash
+npm run build   # builds the React app into client/dist
+npm run dev     # Express now also serves the built app on http://localhost:3000
+```
+
+## Deployment
+
+- **Database:** Neon (free tier, pgvector supported). Run `db/schema.sql` against it, then
+  `DATABASE_URL="<neon url>" npm run embed` to load the chunks
+- **App:** Render web service. Build command `npm install && npm run build`, start command `npm start`
+- **Environment variables (set in Render, not in a file):** `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`,
+  `DATABASE_URL` (Neon, direct connection, `sslmode=verify-full`), `DEMO_ACCESS_LEVEL=public`
+
 ## Security notes
 
 - The API key lives only in the server's `.env` file, which is excluded from Git
@@ -129,6 +175,15 @@ cd client && npm run dev
 - gray-matter's JavaScript frontmatter engine is disabled, since it would run code from a document through `eval`
 - Frontmatter is validated with zod, so a document with a typo in its access level is rejected instead of being misfiled
 - A database CHECK constraint on `access_level` backs up the zod check (defense in depth)
+- Hybrid search applies the same access filter in both the vector and the keyword branch; missing it in either would leak
+- Retrieved documents go in the user turn inside a `<documents>` block, fake closing tags are stripped, and the system prompt says document text is never instructions
+- The `sources` event sends only titles and headings, never chunk content or distances
+- The eval script checks every question for leaks and fails the run if one appears
+- The live demo runs at `public` level only, set on the server; the planted injection doc is `survey` level, so the public site can't even retrieve it
+- `trust proxy` is set to exactly one hop, so the rate limiter sees real client IPs behind Render's proxy without trusting spoofed `X-Forwarded-For` headers
+- The production database connection uses `sslmode=verify-full`, which checks the server's certificate instead of only encrypting
+- Render's GitHub app has access to this one repository only (least privilege)
+- Secrets live in Render's environment settings; `.env`, `client/dist` and `node_modules` are git-ignored
 
 ## What I learned
 
@@ -153,10 +208,18 @@ cd client && npm run dev
 - Similarity ignores permissions: a nearest-neighbour check pulled a directorate memo next to a survey log, which is why filtering must happen before ranking
 - Ingest scripts must be idempotent (a unique key plus upsert), or every re-run duplicates data
 - Free API tiers have rate limits: one 14K-token request failed with a 429 until a payment method raised the limit
+- RAG is Retrieve, Augment, Generate: the AI SDK only talks to Claude; the database work and the NDJSON events are my own server code
+- Similarity isn't truth: "Is the colony safe?" matched upbeat press copy instead of the incident reports
+- Keyword search catches exact names (like "Ferryman") that vectors can miss, but it isn't automatically better: it needed its own cutoff
+- Postgres full-text search has crude stemming and no IDF, which is why BM25 and rerankers exist
+- A golden eval set turns "it feels better" into numbers, and running old vs new side by side shows whether a change helped
+- A hung chat turned out to be a server suspended with Ctrl+Z still holding port 3000, while the new server ignored its listen error
+- A leaked database password must be rotated, not just deleted from the screen, and `read -s` keeps secrets out of shell history
+- Deploying changes the network: behind a proxy, every request seems to come from the proxy unless `trust proxy` is set
 
 ## Roadmap
 
 - [x] Week 1: chat app with memory
 - [x] Week 2: zod validation ✅, structured output ✅, streaming ✅, system prompt ✅, rate limiting ✅, token budget ✅, markdown rendering ✅,
 - [x] Week 3: Postgres + pgvector in Docker ✅, 15 sample docs ✅, chunking ✅, embeddings ✅, permission-aware search ✅
-- [ ] Week 4: retrieval in `/api/chat` with sources, hybrid search, golden eval set, deploy skeleton
+- [x] Week 4: retrieval in `/api/chat` ✅, sources ✅, hybrid search ✅, golden eval set ✅, deployed on Render + Neon ✅
