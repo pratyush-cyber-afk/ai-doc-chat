@@ -16,6 +16,15 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
+app.use((req, _res, next) => {
+  console.log("ip-debug", {
+    ip: req.ip,
+    ips: req.ips,
+    xff: req.headers["x-forwarded-for"],
+  });
+  next();
+});
+
 const client = new Anthropic();
 
 const ACCESS_LEVEL = AccessLevelSchema.parse(
