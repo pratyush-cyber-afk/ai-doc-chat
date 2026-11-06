@@ -76,9 +76,8 @@ const summaryJsonSchema = {
 app.post("/api/summarize", async (req, res) => {
   const parsed = SummarizeRequestSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    console.error("Validation failed:", parsed.error.issues);
+    return res.status(400).json({ error: "Invalid request" });
   }
   const { text } = parsed.data;
 
@@ -139,9 +138,8 @@ app.post("/api/summarize", async (req, res) => {
 app.post("/api/chat", async (req, res) => {
   const result = ChatRequestSchema.safeParse(req.body);
   if (!result.success) {
-    return res
-      .status(400)
-      .json({ error: result.error.issues[0]?.message ?? "Invalid request" });
+    console.error("Chat validation failed:", result.error.issues);
+    return res.status(400).json({ error: "Invalid request" });
   }
   const { messages } = result.data;
 
