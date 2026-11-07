@@ -222,6 +222,9 @@ app.post("/api/chat", async (req, res) => {
 });
 
 const clientDist = path.join(process.cwd(), "client", "dist");
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
 app.use(express.static(clientDist));
 app.get("/{*splat}", (_req, res) => {
   res.sendFile(path.join(clientDist, "index.html"));
