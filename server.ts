@@ -9,13 +9,20 @@ import { tokenBudget, recordUsage } from "./tokenBudget";
 import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
 import { formatContext } from "./lib/context";
 import path from "node:path";
+import helmet from "helmet";
 
 import type { Request, Response, NextFunction } from "express";
 
 const app = express();
-app.disable("x-powered-by");
 // Render: client → Cloudflare → Render proxy → Render proxy → app (verified Nov 4 via X-Forwarded-For)
 app.set("trust proxy", 3);
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: { upgradeInsecureRequests: null },
+    },
+  }),
+);
 
 const client = new Anthropic();
 
