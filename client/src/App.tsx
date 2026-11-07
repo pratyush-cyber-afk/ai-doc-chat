@@ -175,13 +175,7 @@ const App = () => {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      a: ({ node: _node, ...props }) => (
-                        <a
-                          {...props}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        />
-                      ),
+                      a: ({ children }) => <span>{children}</span>,
                       img: ({ alt }) => <span>[image removed: {alt}]</span>,
                     }}
                   >
