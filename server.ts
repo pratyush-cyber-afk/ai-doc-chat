@@ -10,6 +10,8 @@ import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
 import { formatContext } from "./lib/context";
 import path from "node:path";
 import helmet from "helmet";
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./lib/auth";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -23,6 +25,9 @@ app.use(
     },
   }),
 );
+
+// Better Auth handles all /api/auth/* routes (sign-up, sign-in, session...)
+app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 const client = new Anthropic();
 
