@@ -10,5 +10,11 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     },
   },
+  user: {
+    additionalFields: {
+      role: { type: "string", defaultValue: "user", input: false },
+      accessLevel: { type: "string", defaultValue: "public", input: false },
+    },
+  },
   trustedOrigins: ["http://localhost:5173"],
 });

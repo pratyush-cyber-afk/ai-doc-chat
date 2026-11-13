@@ -5,13 +5,14 @@ import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
-import { tokenBudget, recordUsage } from "./tokenBudget";
+import { tokenBudget, recordUsage, usageKey } from "./tokenBudget";
 import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
 import { formatContext } from "./lib/context";
 import path from "node:path";
 import helmet from "helmet";
-import { toNodeHandler } from "better-auth/node";
+
 import { auth } from "./lib/auth";
+import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 
 import type { Request, Response, NextFunction } from "express";
 
@@ -31,11 +32,6 @@ app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 const client = new Anthropic();
 
-const ACCESS_LEVEL = AccessLevelSchema.parse(
-  process.env.DEMO_ACCESS_LEVEL ?? "public",
-);
-console.log(`Chat access level: ${ACCESS_LEVEL}`);
-
 app.use(express.json());
 
 const apiLimiter = rateLimit({
@@ -47,6 +43,13 @@ const apiLimiter = rateLimit({
 });
 
 app.use("/api", apiLimiter);
+// Who is calling? Look it up once; later middleware and routes reuse it
+app.use("/api", async (req, res, next) => {
+  res.locals.session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
+  });
+  next();
+});
 app.use("/api", tokenBudget);
 
 const ChatMessageSchema = z.object({
@@ -110,7 +113,7 @@ app.post("/api/summarize", async (req, res) => {
 
     console.log("Usage:", response.usage);
     recordUsage(
-      req.ip ?? "unknown",
+      usageKey(req, res),
       response.usage.input_tokens + response.usage.output_tokens,
     );
 
@@ -155,14 +158,20 @@ app.post("/api/chat", async (req, res) => {
   }
   const { messages } = result.data;
 
-  const ip = req.ip ?? "unknown";
+  const session = res.locals.session;
+  const accessLevel = AccessLevelSchema.parse(
+    session?.user.accessLevel ?? "public",
+  );
+  console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
+
+  const key = usageKey(req, res);
 
   const last = messages[messages.length - 1];
 
   let context: string;
   let results: SearchResult[] = [];
   try {
-    results = await search(last.content, ACCESS_LEVEL);
+    results = await search(last.content, accessLevel);
     console.log(
       "Retrieved:",
       results.map((r) => `${r.id} (${r.distance.toFixed(3)})`),
@@ -190,7 +199,7 @@ app.post("/api/chat", async (req, res) => {
     messages: augmented,
     onFinish: ({ usage }) => {
       console.log("Usage:", usage);
-      recordUsage(ip, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
+      recordUsage(key, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
     },
     onError: ({ error }) => console.error("Stream error:", error),
   });
