@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { authClient } from "./lib/auth-client";
 
 type Source = { doc_id: string; title: string; headings: string[] };
 type ChatMessage = {
@@ -140,12 +141,32 @@ const App = () => {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 10,
         }}
       >
         <h1>Nova</h1>
-        <button onClick={newChat} disabled={loading || messages.length === 0}>
-          New chat
-        </button>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <button onClick={newChat} disabled={loading || messages.length === 0}>
+            New chat
+          </button>
+          <button
+            onClick={() =>
+              authClient.signIn.social({
+                provider: "google",
+                callbackURL: window.location.origin,
+              })
+            }
+          >
+            Sign in with Google
+          </button>
+        </div>
       </div>
 
       <div
