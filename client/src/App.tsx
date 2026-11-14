@@ -15,6 +15,7 @@ const App = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { data: session, isPending } = authClient.useSession();
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -156,16 +157,32 @@ const App = () => {
           <button onClick={newChat} disabled={loading || messages.length === 0}>
             New chat
           </button>
-          <button
-            onClick={() =>
-              authClient.signIn.social({
-                provider: "google",
-                callbackURL: window.location.origin,
-              })
-            }
-          >
-            Sign in with Google
-          </button>
+          {isPending ? null : session ? (
+            <>
+              <span style={{ fontSize: 14, color: "#666" }}>
+                Signed in as {session.user.name}
+              </span>
+              <button
+                onClick={async () => {
+                  await authClient.signOut();
+                  newChat();
+                }}
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() =>
+                authClient.signIn.social({
+                  provider: "google",
+                  callbackURL: window.location.origin,
+                })
+              }
+            >
+              Sign in with Google
+            </button>
+          )}
         </div>
       </div>
 
@@ -245,11 +262,11 @@ const App = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Ask Nova something..."
+          placeholder={session ? "Ask Nova something..." : "Sign in to chat"}
           style={{ flex: 1, padding: 8 }}
-          disabled={loading}
+          disabled={loading || !session}
         />
-        <button onClick={sendMessage} disabled={loading}>
+        <button onClick={sendMessage} disabled={loading || !session}>
           Send
         </button>
       </div>
