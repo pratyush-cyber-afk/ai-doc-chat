@@ -1,5 +1,4 @@
 import express from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
@@ -29,8 +28,6 @@ app.use(
 
 // Better Auth handles all /api/auth/* routes (sign-up, sign-in, session...)
 app.all("/api/auth/{*any}", toNodeHandler(auth));
-
-const client = new Anthropic();
 
 app.use(express.json());
 
@@ -65,92 +62,12 @@ const ChatRequestSchema = z
     message: "The last message must be from the user.",
   });
 
-const SummarizeRequestSchema = z.object({
-  text: z.string().trim().min(1).max(10000),
-});
-
-const SummarySchema = z.object({
-  title: z.string(),
-  summary: z.string(),
-  tags: z.array(z.string()),
-  sentiment: z.enum(["positive", "neutral", "negative"]),
-});
-
-const summaryJsonSchema = {
-  type: "object",
-  properties: {
-    title: { type: "string" },
-    summary: { type: "string" },
-    tags: { type: "array", items: { type: "string" } },
-    sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
-  },
-  required: ["title", "summary", "tags", "sentiment"],
-  additionalProperties: false,
-};
-
-app.post("/api/summarize", async (req, res) => {
-  const parsed = SummarizeRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    console.error("Validation failed:", parsed.error.issues);
-    return res.status(400).json({ error: "Invalid request" });
-  }
-  const { text } = parsed.data;
-
-  try {
-    const response = await client.messages.create({
-      model: "claude-haiku-5-5",
-      max_tokens: 1500,
-      messages: [
-        {
-          role: "user",
-          content: `Summarize the text inside the <text> tags. Use 3-5 short tags.\n\n<text>\n${text}\n</text>`,
-        },
-      ],
-      output_config: {
-        format: { type: "json_schema", schema: summaryJsonSchema },
-      },
-    });
-
-    console.log("Usage:", response.usage);
-    recordUsage(
-      usageKey(req, res),
-      response.usage.input_tokens + response.usage.output_tokens,
-    );
-
-    if (response.stop_reason !== "end_turn") {
-      return res.status(502).json({
-        error: `Could not summarize (stop reason: ${response.stop_reason}).`,
-      });
-    }
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (textBlock?.type !== "text") {
-      return res.status(502).json({ error: "No summary returned." });
-    }
-
-    let data: unknown;
-    try {
-      data = JSON.parse(textBlock.text);
-    } catch {
-      return res.status(502).json({ error: "Claude returned invalid JSON." });
-    }
-
-    const summary = SummarySchema.safeParse(data);
-    if (!summary.success) {
-      console.error("Schema mismatch:", summary.error.issues);
-      return res
-        .status(502)
-        .json({ error: "Summary didn't match the expected format." });
-    }
-
-    res.json(summary.data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Something went wrong talking to Claude." });
-  }
-});
-
 app.post("/api/chat", async (req, res) => {
+  const session = res.locals.session;
+  if (!session) {
+    return res.status(401).json({ error: "Please sign in to chat." });
+  }
+
   const result = ChatRequestSchema.safeParse(req.body);
   if (!result.success) {
     console.error("Chat validation failed:", result.error.issues);
@@ -158,11 +75,8 @@ app.post("/api/chat", async (req, res) => {
   }
   const { messages } = result.data;
 
-  const session = res.locals.session;
-  const accessLevel = AccessLevelSchema.parse(
-    session?.user.accessLevel ?? "public",
-  );
-  console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
+  const accessLevel = AccessLevelSchema.parse(session.user.accessLevel);
+  console.log(`Chat as ${session.user.id} (${accessLevel})`);
 
   const key = usageKey(req, res);
 

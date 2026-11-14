@@ -16,12 +16,11 @@ when idle, so the first load can take about a minute)
 - Streaming chat with Claude: replies appear word by word, with full conversation memory
 - Express backend that proxies requests, so the API key never reaches the browser
 - Request validation with zod: roles, message count, length, last message from the user
-- Structured output: a `/api/summarize` endpoint returns validated JSON (title, summary, tags, sentiment)
 - Mid-stream error handling: interrupted replies roll back, and cut-off replies are flagged
 - Safe error handling: generic messages to users, details only in server logs
 - Failed messages roll back to the input box so the user can retry
 - Rate limiting: each IP can make up to 20 API requests per minute (429 with a friendly message after that)
-- Daily token budget: each IP can use up to 50,000 tokens per day across all AI endpoints (429 once it's used up)
+- Daily token budget: each IP can use up to 50,000 tokens per day of chat (429 once it's used up)
 - Assistant replies render as markdown (tables, lists, bold, code), with user messages kept as plain text
 - Chat UI: auto-scrolls as replies stream in, plus a "New chat" button to start fresh
 - Document ingestion: markdown docs with frontmatter are split into chunks by heading, with a size fallback and overlap
@@ -36,7 +35,7 @@ when idle, so the first load can take about a minute)
 
 - **Frontend:** React, TypeScript, Vite
 - **Backend:** Node.js 22, Express, TypeScript (tsx), zod
-- **AI:** Claude API (Claude Haiku 5.5, chosen for speed and low cost) via the Vercel AI SDK and the Anthropic SDK
+- **AI:** Claude API (Claude Haiku 5.5, chosen for speed and low cost) via the Vercel AI SDK
 - **Embeddings:** Voyage AI `voyage-4`
 - **Database:** Postgres 18 + pgvector 0.8, running in Docker (OrbStack on macOS) locally, Neon in production
 - **Hosting:** Render (one web service: Express serves both the API and the built React app)
@@ -46,7 +45,6 @@ when idle, so the first load can take about a minute)
 | Method | Route            | What it does                                               |
 | ------ | ---------------- | ---------------------------------------------------------- |
 | POST   | `/api/chat`      | Streams a reply as NDJSON events (`sources`, `text`, `error`, `done`) |
-| POST   | `/api/summarize` | Returns a structured summary as validated JSON             |
 
 ## Sample documents: Charon Colonial
 
