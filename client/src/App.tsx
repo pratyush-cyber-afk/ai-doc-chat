@@ -262,11 +262,11 @@ const App = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder={session ? "Ask Nova something..." : "Sign in to chat"}
+          placeholder={session ? "Ask Nova something..." : "Ask Nova (sign in for more access)"}
           style={{ flex: 1, padding: 8 }}
-          disabled={loading || !session}
+          disabled={loading}
         />
-        <button onClick={sendMessage} disabled={loading || !session}>
+        <button onClick={sendMessage} disabled={loading}>
           Send
         </button>
       </div>

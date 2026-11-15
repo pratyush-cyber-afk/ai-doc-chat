@@ -64,9 +64,6 @@ const ChatRequestSchema = z
 
 app.post("/api/chat", async (req, res) => {
   const session = res.locals.session;
-  if (!session) {
-    return res.status(401).json({ error: "Please sign in to chat." });
-  }
 
   const result = ChatRequestSchema.safeParse(req.body);
   if (!result.success) {
@@ -75,8 +72,8 @@ app.post("/api/chat", async (req, res) => {
   }
   const { messages } = result.data;
 
-  const accessLevel = AccessLevelSchema.parse(session.user.accessLevel);
-  console.log(`Chat as ${session.user.id} (${accessLevel})`);
+  const accessLevel = AccessLevelSchema.parse(session?.user.accessLevel ?? "public");
+  console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
 
   const key = usageKey(req, res);
 
