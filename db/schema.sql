@@ -25,3 +25,10 @@ ALTER TABLE chunks ADD COLUMN IF NOT EXISTS content_tsv tsvector
 
 CREATE INDEX IF NOT EXISTS chunks_content_tsv_idx
   ON chunks USING GIN (content_tsv);
+
+CREATE TABLE IF NOT EXISTS usage (
+  usage_key text   NOT NULL,
+  day       date   NOT NULL DEFAULT current_date,
+  tokens    bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY (usage_key, day)
+);

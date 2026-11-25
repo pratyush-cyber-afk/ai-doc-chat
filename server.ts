@@ -72,7 +72,9 @@ app.post("/api/chat", async (req, res) => {
   }
   const { messages } = result.data;
 
-  const accessLevel = AccessLevelSchema.parse(session?.user.accessLevel ?? "public");
+  const accessLevel = AccessLevelSchema.parse(
+    session?.user.accessLevel ?? "public",
+  );
   console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
 
   const key = usageKey(req, res);
@@ -110,7 +112,10 @@ app.post("/api/chat", async (req, res) => {
     messages: augmented,
     onFinish: ({ usage }) => {
       console.log("Usage:", usage);
-      recordUsage(key, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
+      recordUsage(
+        key,
+        (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+      ).catch((err) => console.error("recordUsage failed:", err));
     },
     onError: ({ error }) => console.error("Stream error:", error),
   });
