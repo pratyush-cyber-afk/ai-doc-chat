@@ -1,12 +1,12 @@
 import express from "express";
 import { z } from "zod";
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
 import { tokenBudget, recordUsage, usageKey } from "./tokenBudget";
-import { search, AccessLevelSchema, type SearchResult } from "./lib/search";
-import { formatContext } from "./lib/context";
+import { AccessLevelSchema, type SearchResult } from "./lib/search";
+import { makeSearchDocsTool } from "./lib/tools";
 import path from "node:path";
 import helmet from "helmet";
 
@@ -79,37 +79,26 @@ app.post("/api/chat", async (req, res) => {
 
   const key = usageKey(req, res);
 
-  const last = messages[messages.length - 1];
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  const send = (event: object) => res.write(JSON.stringify(event) + "\n");
 
-  let context: string;
-  let results: SearchResult[] = [];
-  try {
-    results = await search(last.content, accessLevel);
+  // Every chunk returned by any search_docs call in this request (for Sources)
+  const retrieved: SearchResult[] = [];
+  const searchDocs = makeSearchDocsTool(accessLevel, (results) => {
     console.log(
       "Retrieved:",
       results.map((r) => `${r.id} (${r.distance.toFixed(3)})`),
     );
-    context = formatContext(results);
-  } catch (err) {
-    console.error("Search failed:", err);
-    return res.status(503).json({
-      error: "Document search is unavailable right now. Please try again.",
-    });
-  }
-
-  const augmented = [
-    ...messages.slice(0, -1),
-    {
-      role: "user" as const,
-      content: `${context}\n\nQuestion: ${last.content}`,
-    },
-  ];
+    retrieved.push(...results);
+  });
 
   const ai = streamText({
     model: anthropic("claude-haiku-5-5"),
     system: CHAT_SYSTEM_PROMPT,
     maxOutputTokens: 1500,
-    messages: augmented,
+    messages,
+    tools: { search_docs: searchDocs },
+    stopWhen: stepCountIs(3),
     onFinish: ({ usage }) => {
       console.log("Usage:", usage);
       recordUsage(
@@ -119,20 +108,19 @@ app.post("/api/chat", async (req, res) => {
     },
     onError: ({ error }) => console.error("Stream error:", error),
   });
-  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
 
-  const send = (event: object) => res.write(JSON.stringify(event) + "\n");
-
-  const sources = Object.values(
-    results.reduce<
-      Record<string, { doc_id: string; title: string; headings: string[] }>
-    >((acc, r) => {
-      acc[r.doc_id] ??= { doc_id: r.doc_id, title: r.title, headings: [] };
-      acc[r.doc_id].headings.push(r.heading);
-      return acc;
-    }, {}),
-  );
-  send({ type: "sources", sources });
+  const buildSources = () =>
+    Object.values(
+      retrieved.reduce<
+        Record<string, { doc_id: string; title: string; headings: string[] }>
+      >((acc, r) => {
+        acc[r.doc_id] ??= { doc_id: r.doc_id, title: r.title, headings: [] };
+        if (!acc[r.doc_id].headings.includes(r.heading)) {
+          acc[r.doc_id].headings.push(r.heading);
+        }
+        return acc;
+      }, {}),
+    );
 
   try {
     for await (const part of ai.stream) {
@@ -144,6 +132,7 @@ app.post("/api/chat", async (req, res) => {
           message: "The reply was interrupted. Please try again.",
         });
       } else if (part.type === "finish") {
+        send({ type: "sources", sources: buildSources() });
         send({ type: "done", finishReason: part.finishReason });
       }
     }
