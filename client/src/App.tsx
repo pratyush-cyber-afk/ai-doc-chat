@@ -9,12 +9,19 @@ type ChatMessage = {
   content: string;
   sources?: Source[];
 };
+// A tool call Nova wants to run, waiting for the user's decision
+type PendingApproval = {
+  pendingId: string;
+  toolName: string;
+  input: unknown;
+};
 
 const App = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [approval, setApproval] = useState<PendingApproval | null>(null);
   const { data: session, isPending } = authClient.useSession();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -23,8 +30,72 @@ const App = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  // Reads our NDJSON stream and appends text to the last assistant message
+  const readStream = async (body: ReadableStream<Uint8Array>) => {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+    let streamError = "";
+    let finishReason = "";
+    let approvalEvent: PendingApproval | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        if (event.type === "text") {
+          fullText += event.text;
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + event.text,
+            };
+            return updated;
+          });
+        } else if (event.type === "sources" && event.sources.length > 0) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              ...updated[updated.length - 1],
+              sources: event.sources,
+            };
+            return updated;
+          });
+        } else if (event.type === "approval") {
+          approvalEvent = {
+            pendingId: event.pendingId,
+            toolName: event.toolName,
+            input: event.input,
+          };
+        } else if (event.type === "error") {
+          streamError = event.message;
+        } else if (event.type === "done") {
+          finishReason = event.finishReason;
+        }
+      }
+    }
+
+    return { fullText, streamError, finishReason, approvalEvent };
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || approval) return;
 
     const newMessages: ChatMessage[] = [
       ...messages,
@@ -46,7 +117,9 @@ const App = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map(({ role, content }) => ({ role, content })),
+          messages: newMessages
+            .filter((m) => m.content.trim())
+            .map(({ role, content }) => ({ role, content })),
         }),
       });
 
@@ -56,60 +129,13 @@ const App = () => {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let fullText = "";
-      let streamError = "";
-      let finishReason = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let event;
-          try {
-            event = JSON.parse(line);
-          } catch {
-            continue;
-          }
-
-          if (event.type === "text") {
-            fullText += event.text;
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = {
-                ...last,
-                content: last.content + event.text,
-              };
-              return updated;
-            });
-          } else if (event.type === "sources") {
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...updated[updated.length - 1],
-                sources: event.sources,
-              };
-              return updated;
-            });
-          } else if (event.type === "error") {
-            streamError = event.message;
-          } else if (event.type === "done") {
-            finishReason = event.finishReason;
-          }
-        }
-      }
+      const { fullText, streamError, finishReason, approvalEvent } =
+        await readStream(res.body);
 
       if (streamError) {
         rollback(streamError);
+      } else if (approvalEvent) {
+        setApproval(approvalEvent);
       } else if (!fullText.trim()) {
         rollback("Claude didn't return an answer. Please try again.");
       } else if (finishReason === "length") {
@@ -122,7 +148,52 @@ const App = () => {
     }
   };
 
+  // The user clicked Approve or Deny: send only the id + yes/no, then stream the rest
+  const decide = async (approved: boolean) => {
+    if (!approval || loading) return;
+    const { pendingId } = approval;
+    setApproval(null);
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/chat/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingId, approved }),
+      });
+
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Something went wrong.");
+        return;
+      }
+
+      // Keep the resumed reply apart from any text Nova wrote before pausing
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last?.role === "assistant" && last.content) {
+          updated[updated.length - 1] = { ...last, content: last.content + "\n\n" };
+        }
+        return updated;
+      });
+
+      const { streamError, approvalEvent } = await readStream(res.body);
+      if (streamError) {
+        setError(streamError);
+      } else if (approvalEvent) {
+        setApproval(approvalEvent);
+      }
+    } catch {
+      setError("Could not reach the server. Is it running?");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const newChat = () => {
+    setApproval(null);
     setMessages([]);
     setInput("");
     setError("");
@@ -252,6 +323,39 @@ const App = () => {
         {loading && messages[messages.length - 1]?.content === "" && (
           <div style={{ color: "#888" }}>Thinking...</div>
         )}
+        {approval && (
+          <div
+            style={{
+              alignSelf: "flex-start",
+              maxWidth: "80%",
+              border: "1px solid #f59e0b",
+              background: "#fffbeb",
+              borderRadius: 12,
+              padding: "10px 12px",
+            }}
+          >
+            <strong>Nova wants to run: {approval.toolName}</strong>
+            {/* Model-written arguments, shown as plain text (never HTML) */}
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                fontSize: 13,
+                margin: "8px 0",
+                fontFamily: "monospace",
+              }}
+            >
+              {JSON.stringify(approval.input, null, 2)}
+            </pre>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => decide(true)} disabled={loading}>
+                Approve
+              </button>
+              <button onClick={() => decide(false)} disabled={loading}>
+                Deny
+              </button>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -262,11 +366,17 @@ const App = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder={session ? "Ask Nova something..." : "Ask Nova (sign in for more access)"}
+          placeholder={
+            approval
+              ? "Approve or deny the request above first"
+              : session
+                ? "Ask Nova something..."
+                : "Ask Nova (sign in for more access)"
+          }
           style={{ flex: 1, padding: 8 }}
-          disabled={loading}
+          disabled={loading || approval !== null}
         />
-        <button onClick={sendMessage} disabled={loading}>
+        <button onClick={sendMessage} disabled={loading || approval !== null}>
           Send
         </button>
       </div>

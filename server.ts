@@ -1,12 +1,22 @@
 import express from "express";
 import { z } from "zod";
-import { streamText, stepCountIs } from "ai";
+import { randomUUID } from "node:crypto";
+import {
+  streamText,
+  stepCountIs,
+  type ModelMessage,
+  type ToolSet,
+} from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { CHAT_SYSTEM_PROMPT } from "./prompts";
 import rateLimit from "express-rate-limit";
 import { tokenBudget, recordUsage, usageKey } from "./tokenBudget";
-import { AccessLevelSchema, type SearchResult } from "./lib/search";
-import { makeSearchDocsTool } from "./lib/tools";
+import {
+  AccessLevelSchema,
+  type AccessLevel,
+  type SearchResult,
+} from "./lib/search";
+import { makeSearchDocsTool, makeCreateTicketTool } from "./lib/tools";
 import path from "node:path";
 import helmet from "helmet";
 
@@ -62,27 +72,27 @@ const ChatRequestSchema = z
     message: "The last message must be from the user.",
   });
 
-app.post("/api/chat", async (req, res) => {
-  const session = res.locals.session;
+// Tool calls paused for a human decision. In memory: resets on restart (fine for a demo).
+type PendingApproval = {
+  ownerKey: string;
+  messages: ModelMessage[];
+  approvals: { approvalId: string; toolName: string; input: unknown }[];
+  createdAt: number;
+};
+const pendingApprovals = new Map<string, PendingApproval>();
+const APPROVAL_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-  const result = ChatRequestSchema.safeParse(req.body);
-  if (!result.success) {
-    console.error("Chat validation failed:", result.error.issues);
-    return res.status(400).json({ error: "Invalid request" });
-  }
-  const { messages } = result.data;
-
-  const accessLevel = AccessLevelSchema.parse(
-    session?.user.accessLevel ?? "public",
-  );
-  console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
-
-  const key = usageKey(req, res);
-
+// Runs the agent loop and streams NDJSON events to the browser.
+// Used by both /api/chat (new question) and /api/chat/approve (resume).
+const streamAgent = async (
+  res: Response,
+  messages: ModelMessage[],
+  key: string,
+  accessLevel: AccessLevel,
+) => {
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
   const send = (event: object) => res.write(JSON.stringify(event) + "\n");
 
-  // Every chunk returned by any search_docs call in this request (for Sources)
   const retrieved: SearchResult[] = [];
   const searchDocs = makeSearchDocsTool(accessLevel, (results) => {
     console.log(
@@ -91,13 +101,17 @@ app.post("/api/chat", async (req, res) => {
     );
     retrieved.push(...results);
   });
+  // Write tool only for signed-in users: logged-out visitors never even see it
+  const signedIn = key.startsWith("user:");
+  const tools: ToolSet = { search_docs: searchDocs };
+  if (signedIn) tools.create_ticket = makeCreateTicketTool(key);
 
   const ai = streamText({
     model: anthropic("claude-haiku-5-5"),
     system: CHAT_SYSTEM_PROMPT,
     maxOutputTokens: 1500,
     messages,
-    tools: { search_docs: searchDocs },
+    tools,
     stopWhen: stepCountIs(3),
     onFinish: ({ usage }) => {
       console.log("Usage:", usage);
@@ -122,20 +136,49 @@ app.post("/api/chat", async (req, res) => {
       }, {}),
     );
 
+  const approvals: PendingApproval["approvals"] = [];
+  let finishReason: string | undefined;
+
   try {
     for await (const part of ai.stream) {
       if (part.type === "text-delta") {
         send({ type: "text", text: part.text });
+      } else if (part.type === "tool-approval-request") {
+        approvals.push({
+          approvalId: part.approvalId,
+          toolName: part.toolCall.toolName,
+          input: part.toolCall.input,
+        });
       } else if (part.type === "error") {
         send({
           type: "error",
           message: "The reply was interrupted. Please try again.",
         });
       } else if (part.type === "finish") {
-        send({ type: "sources", sources: buildSources() });
-        send({ type: "done", finishReason: part.finishReason });
+        finishReason = part.finishReason;
       }
     }
+
+    if (approvals.length > 0) {
+      // Forget expired requests so the Map can't grow forever
+      for (const [id, p] of pendingApprovals) {
+        if (Date.now() - p.createdAt > APPROVAL_TTL_MS) pendingApprovals.delete(id);
+      }
+      const pendingId = randomUUID();
+      pendingApprovals.set(pendingId, {
+        ownerKey: key,
+        messages: [...messages, ...(await ai.responseMessages)],
+        approvals,
+        createdAt: Date.now(),
+      });
+      // The human sees the first request; any others from the same step get denied
+      const { toolName, input } = approvals[0];
+      console.log(`Approval needed (${pendingId}): ${toolName}`, input);
+      send({ type: "approval", pendingId, toolName, input });
+    }
+
+    send({ type: "sources", sources: buildSources() });
+    send({ type: "done", finishReason });
   } catch (err) {
     console.error(err);
     send({
@@ -145,6 +188,69 @@ app.post("/api/chat", async (req, res) => {
   } finally {
     res.end();
   }
+};
+
+app.post("/api/chat", async (req, res) => {
+  const session = res.locals.session;
+
+  const result = ChatRequestSchema.safeParse(req.body);
+  if (!result.success) {
+    console.error("Chat validation failed:", result.error.issues);
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  const { messages } = result.data;
+
+  const accessLevel = AccessLevelSchema.parse(
+    session?.user.accessLevel ?? "public",
+  );
+  console.log(`Chat as ${session?.user.id ?? "anonymous"} (${accessLevel})`);
+
+  await streamAgent(res, messages, usageKey(req, res), accessLevel);
+});
+
+const ApprovalRequestSchema = z.object({
+  pendingId: z.uuid(),
+  approved: z.boolean(),
+});
+
+app.post("/api/chat/approve", async (req, res) => {
+  const parsed = ApprovalRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  const { pendingId, approved } = parsed.data;
+  const key = usageKey(req, res);
+  const pending = pendingApprovals.get(pendingId);
+
+  // One answer for "doesn't exist", "not yours" and "expired": don't reveal which
+  if (
+    !pending ||
+    pending.ownerKey !== key ||
+    Date.now() - pending.createdAt > APPROVAL_TTL_MS
+  ) {
+    return res
+      .status(404)
+      .json({ error: "This approval is no longer available." });
+  }
+  pendingApprovals.delete(pendingId); // single use: can't be replayed
+
+  const accessLevel = AccessLevelSchema.parse(
+    res.locals.session?.user.accessLevel ?? "public",
+  );
+  console.log(
+    `Approval ${approved ? "GRANTED" : "DENIED"} by ${key}: ${pending.approvals[0].toolName}`,
+  );
+
+  const decision: ModelMessage = {
+    role: "tool",
+    content: pending.approvals.map((a, i) => ({
+      type: "tool-approval-response" as const,
+      approvalId: a.approvalId,
+      approved: i === 0 ? approved : false,
+    })),
+  };
+
+  await streamAgent(res, [...pending.messages, decision], key, accessLevel);
 });
 
 const clientDist = path.join(process.cwd(), "client", "dist");

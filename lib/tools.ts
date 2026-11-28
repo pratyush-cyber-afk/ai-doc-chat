@@ -28,3 +28,37 @@ export const makeSearchDocsTool = (
       }
     },
   });
+
+type Ticket = {
+  id: string;
+  title: string;
+  details: string;
+  priority: "low" | "medium" | "high";
+  createdBy: string;
+  createdAt: string;
+};
+
+export const tickets: Ticket[] = [];
+
+export const makeCreateTicketTool = (createdBy: string) =>
+  tool({
+    description:
+      "Create a ticket for the Charon Colonial operations team. Only use this when the user explicitly asks you to create or file a ticket.",
+    inputSchema: z.object({
+      title: z.string().min(3).max(120),
+      details: z.string().max(1000),
+      priority: z.enum(["low", "medium", "high"]),
+    }),
+    needsApproval: true,
+    execute: async (input) => {
+      const ticket: Ticket = {
+        id: `TCK-${1001 + tickets.length}`,
+        ...input,
+        createdBy,
+        createdAt: new Date().toISOString(),
+      };
+      tickets.push(ticket);
+      console.log("Ticket created:", ticket);
+      return { ticketId: ticket.id, status: "created" };
+    },
+  });
